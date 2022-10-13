@@ -2,26 +2,36 @@ import crypto from "crypto";
 import { Request, Response } from "express";
 import { prisma } from "../../server";
 import speakeasy from "speakeasy";
+import util from "util";
 
 const RegisterRouteHandler = async (req: Request, res: Response) => {
   try {
+    const scrypt = util.promisify(crypto.scrypt)
+    const pbkdf2 = util.promisify(crypto.pbkdf2)
     // Coleta as informações do payload
+    // scrypt(email)
+    // gcm(password)
+    // salt
     const { email, password } = req.body;
 
     // Gera um salt para a senha e o secret para o futuro token
     const salt = crypto.randomBytes(16).toString("hex");
+    // usar o pbkdf2
     const secret = speakeasy.generateSecret().hex;
+    const encrypted_email = await scrypt(email, salt, 2048);
 
-    // Cria o usuário no banco de dados com o hash da senha
-    crypto.pbkdf2(password, salt, 872791, 32, "sha512", async (err, hash) => {
-      await prisma.user.create({
-        data: {
-          email,
-          password: hash.toString("hex"),
-          salt,
-          secret,
-        },
-      });
+    const key = (await (pbkdf2(password, salt, 872791, 32, "sha512"))).toString("hex")
+    const encrypted_password = (crypto.createCipheriv("aes-256-gcm", key, salt)).update(password);
+    console.log(encrypted_password.toString("hex"))
+
+    await prisma.user.create({
+      data: {
+        //@ts-ignore
+        email: encrypted_email.toString("hex"),
+        password: encrypted_password.toString("hex"),
+        salt,
+        secret,
+      },
     });
 
     res.status(201).json({

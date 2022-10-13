@@ -45,3 +45,7 @@ Envia um POST no estilo:
 obs: O user ID pode ser coletado no banco de dados (utilize o comando `npx prisma studio` para ter acesso)
 
 e retorna uma mensagem de sucesso caso ocorra tudo certo.
+
+
+# Exemplo de teste no postman
+![image](https://user-images.githubusercontent.com/55602031/195612089-430edb50-3c76-46ca-8b12-a49204bc5fed.png)

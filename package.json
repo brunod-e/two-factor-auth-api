@@ -21,11 +21,13 @@
     "typescript": "^4.8.4"
   },
   "dependencies": {
+    "@levminer/speakeasy": "^1.4.0",
     "bcrypt": "^5.1.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "node-password-lite": "^1.0.0",
     "nodejs-password": "^1.0.2",
+    "otplib": "^12.0.1",
     "speakeasy": "^2.0.0"
   }
 }

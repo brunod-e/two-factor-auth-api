@@ -10,16 +10,14 @@ datasource db {
 model User {
   id       String @id @default(uuid())
   email    String @unique
-  name     String
   password String
+  salt String
+  secret String
 
-  otp_enabled  Boolean @default(false)
+  otp_enabled  Boolean @default(true)
   otp_verified Boolean @default(false)
 
-  otp_ascii    String?
-  otp_hex      String?
-  otp_base32   String?
-  otp_auth_url String?
+  otp_token    String?
 
   @@map(name: "users")
 }

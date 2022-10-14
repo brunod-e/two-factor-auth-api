@@ -6,16 +6,23 @@ import util from "util";
 import { User } from "@prisma/client";
 import { encrypt, decrypt } from "../utils/crypto";
 
-const encryptPassword = (password: string, salt: string) => {
+const encryptPassword = (password: string, salt: string, email: string) => {
   const key = crypto.pbkdf2Sync(password, salt, 100, 32, "sha256");
-  const valueIV = encrypt(password, key);
-  return valueIV.toString("hex");
+  const IV = crypto.pbkdf2Sync(email, salt, 100, 32, "sha256");
+  const value = encrypt(password, key, IV);
+  return value.toString("hex");
 };
 
-const decryptPassword = (valueIVHex: string, password: string, salt) => {
-  const valueIV = Buffer.from(valueIVHex, "hex");
+const decryptPassword = (
+  valueHex: string,
+  password: string,
+  salt: string,
+  email: string
+) => {
+  const value = Buffer.from(valueHex, "hex");
   const key = crypto.pbkdf2Sync(password, salt, 100, 32, "sha256");
-  return decrypt(valueIV, key).toString("utf8");
+  const IV = crypto.pbkdf2Sync(email, salt, 100, 32, "sha256");
+  return decrypt(value, key, IV).toString("utf8");
 };
 
 const RegisterRouteHandler = async (req: Request, res: Response) => {
@@ -24,18 +31,24 @@ const RegisterRouteHandler = async (req: Request, res: Response) => {
 
     const { email, password } = req.body;
 
-    const secret = speakeasy.generateSecret().hex;
-
     const salt = crypto.randomBytes(32).toString("hex");
-    const encrypted_email = await scrypt(email, salt, 2048);
-    const encrypted_password = encryptPassword(password, salt);
+    const secret = encrypt(
+      crypto.randomBytes(128).toString("hex"),
+      crypto.pbkdf2Sync(password, salt, 100, 32, "sha256"),
+      crypto.randomBytes(32).toString("hex")
+    ).toString("hex");
+
+    // @ts-ignore
+    const encrypted_email = (await scrypt(email, salt, 2048)).toString("hex");
+
+    const encrypted_password = encryptPassword(password, salt, encrypted_email);
 
     await prisma.user.create({
       data: {
         //@ts-ignore
-        email: encrypted_email.toString("hex"),
+        email: encrypted_email,
         //@ts-ignore
-        password: encrypted_password.toString("hex"),
+        password: encrypted_password.toString("base64"),
         salt,
         secret,
       },
@@ -76,7 +89,8 @@ const LoginRouteHandler = async (req: Request, res: Response) => {
     const decryptedPassword = decryptPassword(
       user.password,
       password,
-      user.salt
+      user.salt,
+      user.email
     );
 
     const generatedToken = speakeasy.totp({
@@ -89,7 +103,7 @@ const LoginRouteHandler = async (req: Request, res: Response) => {
     if (decryptedPassword !== password) {
       return res.status(404).json({
         status: "fail",
-        message: "Login error, password is invalid",
+        message: "Login error, please check your credentials",
       });
     } else {
       res.status(200).json({

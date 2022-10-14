@@ -105,10 +105,15 @@ const LoginRouteHandler = async (req: Request, res: Response) => {
         status: "fail",
         message: "Login error, please check your credentials",
       });
-    } else {
+    } else if (user.otp_enabled) {
       res.status(200).json({
         status: "success",
         generatedToken,
+      });
+    } else {
+      res.status(200).json({
+        status: "success",
+        message: "Logged in successfully",
       });
     }
   } catch (error) {
@@ -173,8 +178,119 @@ const OTPVerify = async (req: Request, res: Response) => {
   }
 };
 
+const OTPEnable = async (req: Request, res: Response) => {
+  try {
+    // Coleta as informações do payload
+    const { user_id, token } = req.body;
+
+    // Busca o usuário no banco de dados
+    const user = await prisma.user.findUnique({ where: { id: user_id } });
+
+    // Retorna erro caso o usuário não exista
+    if (!user) {
+      return res.status(401).json({
+        status: "fail",
+        message: "User not found",
+      });
+    }
+
+    // Verifica se o token informado é válido
+    const isValidToken = speakeasy.totp.verify({
+      secret: user.secret,
+      algorithm: "sha256",
+      encoding: "hex",
+      token: token,
+      step: 60,
+    });
+
+    // Retorna um erro caso o token não seja válido
+    if (!isValidToken) {
+      return res.status(401).json({
+        status: "fail",
+        message: "Token is invalid",
+      });
+    }
+
+    // Informa que o token ja foi verificado
+    await prisma.user.update({
+      where: { id: user_id },
+      data: {
+        otp_verified: true,
+        otp_enabled: true,
+      },
+    });
+
+    // Usuario ja pode logar normalmente
+    res.status(200).json({
+      status: "success",
+      message: "Token is valid, you are logged in",
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
+const OTPDisable = async (req: Request, res: Response) => {
+  try {
+    // Coleta as informações do payload
+    const { user_id, token } = req.body;
+
+    // Busca o usuário no banco de dados
+    const user = await prisma.user.findUnique({ where: { id: user_id } });
+
+    // Retorna erro caso o usuário não exista
+    if (!user) {
+      return res.status(401).json({
+        status: "fail",
+        message: "User not found",
+      });
+    }
+
+    // Verifica se o token informado é válido
+    const isValidToken = speakeasy.totp.verify({
+      secret: user.secret,
+      algorithm: "sha256",
+      encoding: "hex",
+      token: token,
+      step: 60,
+    });
+
+    // Retorna um erro caso o token não seja válido
+    if (!isValidToken) {
+      return res.status(401).json({
+        status: "fail",
+        message: "Token is invalid",
+      });
+    }
+
+    // Informa que o token ja foi verificado
+    await prisma.user.update({
+      where: { id: user_id },
+      data: {
+        otp_verified: true,
+        otp_enabled: false,
+      },
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "2FA is disabled now",
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "error",
+      message: error.message,
+    });
+  }
+};
+
 export default {
   RegisterRouteHandler,
   LoginRouteHandler,
   OTPVerify,
+  OTPEnable,
+  OTPDisable,
 };

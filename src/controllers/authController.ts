@@ -3,31 +3,38 @@ import { Request, Response } from "express";
 import { prisma } from "../../server";
 import speakeasy from "speakeasy";
 import util from "util";
+import { User } from "@prisma/client";
+import { encrypt, decrypt } from "../utils/crypto";
+
+const encryptPassword = (password: string, salt: string) => {
+  const key = crypto.pbkdf2Sync(password, salt, 100, 32, "sha256");
+  const valueIV = encrypt(password, key);
+  return valueIV.toString("hex");
+};
+
+const decryptPassword = (valueIVHex: string, password: string, salt) => {
+  const valueIV = Buffer.from(valueIVHex, "hex");
+  const key = crypto.pbkdf2Sync(password, salt, 100, 32, "sha256");
+  return decrypt(valueIV, key).toString("utf8");
+};
 
 const RegisterRouteHandler = async (req: Request, res: Response) => {
   try {
-    const scrypt = util.promisify(crypto.scrypt)
-    const pbkdf2 = util.promisify(crypto.pbkdf2)
-    // Coleta as informações do payload
-    // scrypt(email)
-    // gcm(password)
-    // salt
+    const scrypt = util.promisify(crypto.scrypt);
+
     const { email, password } = req.body;
 
-    // Gera um salt para a senha e o secret para o futuro token
-    const salt = crypto.randomBytes(16).toString("hex");
-    // usar o pbkdf2
     const secret = speakeasy.generateSecret().hex;
-    const encrypted_email = await scrypt(email, salt, 2048);
 
-    const key = (await (pbkdf2(password, salt, 872791, 32, "sha512"))).toString("hex")
-    const encrypted_password = (crypto.createCipheriv("aes-256-gcm", key, salt)).update(password);
-    console.log(encrypted_password.toString("hex"))
+    const salt = crypto.randomBytes(32).toString("hex");
+    const encrypted_email = await scrypt(email, salt, 2048);
+    const encrypted_password = encryptPassword(password, salt);
 
     await prisma.user.create({
       data: {
         //@ts-ignore
         email: encrypted_email.toString("hex"),
+        //@ts-ignore
         password: encrypted_password.toString("hex"),
         salt,
         secret,
@@ -48,13 +55,17 @@ const RegisterRouteHandler = async (req: Request, res: Response) => {
 
 const LoginRouteHandler = async (req: Request, res: Response) => {
   try {
-    // Coleta as informações do payload
+    const scrypt = util.promisify(crypto.scrypt);
+
     const { email, password } = req.body;
 
-    // Busca o usuário no banco de dados
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user: User = (await prisma.user.findMany()).filter(async (user) => {
+      const encrypted_email = await scrypt(email, user.salt, 2048);
 
-    // Verifica se o usuário existe
+      // @ts-ignore
+      return user.email === encrypted_email.toString("hex");
+    })[0];
+
     if (!user) {
       return res.status(404).json({
         status: "fail",
@@ -62,36 +73,30 @@ const LoginRouteHandler = async (req: Request, res: Response) => {
       });
     }
 
-    // Compara a senha informada com a senha do banco de dados
-    crypto.pbkdf2(
+    const decryptedPassword = decryptPassword(
+      user.password,
       password,
-      user.salt,
-      872791,
-      32,
-      "sha512",
-      async (err, hash) => {
-        // Gera o token para a 2FA
-        const generatedToken = speakeasy.totp({
-          secret: user.secret,
-          encoding: "hex",
-          step: 60,
-          algorithm: "sha256",
-        });
-
-        // Retorna um erro caso a senha não seja válida
-        if (user.password !== hash.toString("hex")) {
-          return res.status(404).json({
-            status: "fail",
-            message: "Login error, please check your credentials",
-          });
-        } else {
-          res.status(200).json({
-            status: "success",
-            generatedToken,
-          });
-        }
-      }
+      user.salt
     );
+
+    const generatedToken = speakeasy.totp({
+      secret: user.secret,
+      encoding: "hex",
+      step: 60,
+      algorithm: "sha256",
+    });
+
+    if (decryptedPassword !== password) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Login error, password is invalid",
+      });
+    } else {
+      res.status(200).json({
+        status: "success",
+        generatedToken,
+      });
+    }
   } catch (error) {
     res.status(500).json({
       status: "error",

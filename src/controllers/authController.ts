@@ -7,8 +7,8 @@ import { User } from "@prisma/client";
 import { encrypt, decrypt } from "../utils/crypto";
 
 const encryptPassword = (password: string, salt: string, email: string) => {
-  const key = crypto.pbkdf2Sync(password, salt, 100, 32, "sha256");
-  const IV = crypto.pbkdf2Sync(email, salt, 100, 32, "sha256");
+  const key = crypto.pbkdf2Sync(password, salt, 13547, 32, "sha256");
+  const IV = crypto.pbkdf2Sync(email, salt, 13547, 32, "sha256");
   const value = encrypt(password, key, IV);
   return value.toString("hex");
 };
@@ -20,8 +20,8 @@ const decryptPassword = (
   email: string
 ) => {
   const value = Buffer.from(valueHex, "hex");
-  const key = crypto.pbkdf2Sync(password, salt, 100, 32, "sha256");
-  const IV = crypto.pbkdf2Sync(email, salt, 100, 32, "sha256");
+  const key = crypto.pbkdf2Sync(password, salt, 13547, 32, "sha256");
+  const IV = crypto.pbkdf2Sync(email, salt, 13547, 32, "sha256");
   return decrypt(value, key, IV).toString("utf8");
 };
 
@@ -34,7 +34,7 @@ const RegisterRouteHandler = async (req: Request, res: Response) => {
     const salt = crypto.randomBytes(32).toString("hex");
     const secret = encrypt(
       crypto.randomBytes(128).toString("hex"),
-      crypto.pbkdf2Sync(password, salt, 100, 32, "sha256"),
+      crypto.pbkdf2Sync(password, salt, 13547, 32, "sha256"),
       crypto.randomBytes(32).toString("hex")
     ).toString("hex");
 
